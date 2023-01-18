@@ -225,6 +225,7 @@ async function installPack(packPath, manifest) {
 
     // Create placeholder variables for pack installation paths. 
     let installServerPath, installWorldPath, WorldPacksJSON, WorldPacksPath, rawPath = null;
+    let doWorldInstall, doServerInstall = false;
 
     // Update variables based on the pack type.
     if (type == 'data') {
@@ -233,28 +234,41 @@ async function installPack(packPath, manifest) {
         WorldPacksJSON = worldBehaviorsJSON;
         WorldPacksPath = worldBehaviorsJsonPath;
         rawPath = 'behavior_packs/' + name;
+        doWorldInstall, doServerInstall = true;
     }else if (type == 'resources') {
         installServerPath = path.join(serverResourcesDir, name);
         installWorldPath = path.join(worldResourcesDir, name);
         WorldPacksJSON = worldResourcesJSON;
         WorldPacksPath = worldResourcesJsonPath;
         rawPath = 'resource_packs/' + name;
+        doWorldInstall, doServerInstall = true;
+    }else if (type == 'script') {
+        installServerPath = path.join(serverBehaviorsDir, name);
+        installWorldPath = path.join(worldBehaviorsDir, name);
+        WorldPacksJSON = worldResourcesJSON;
+        WorldPacksPath = worldResourcesJsonPath;
+        rawPath = 'behavior_packs/' + name;
+        doServerInstall = true;
     }else {
         throw new Error('Unknown pack type, ' + type);
     }
     
-    // Install pack to the world.
-    let worldPackInfo = {'pack_id': uuid, "version": version}
-    WorldPacksJSON.unshift(worldPackInfo);
-    await promiseExtract(packPath, installWorldPath);
-    await fs.writeFile(WorldPacksPath, JSON.stringify(WorldPacksJSON, undefined, 2));
-    
-    // Install pack to the server.
-    version = `${version[0]}.${version[1]}.${version[2]}`;
-    let serverPackInfo = {"file_system": "RawPath", "path": rawPath, "uuid": uuid, "version": version};
-    serverPacksJSON.splice(1, 0, serverPackInfo);
-    await promiseExtract(packPath, installServerPath);
-    await fs.writeFile(serverPacksJsonPath, JSON.stringify(serverPacksJSON, undefined, 2));
+    if (doWorldInstall) {
+        // Install pack to the world.
+        let worldPackInfo = {'pack_id': uuid, "version": version}
+        WorldPacksJSON.unshift(worldPackInfo);
+        await promiseExtract(packPath, installWorldPath);
+        await fs.writeFile(WorldPacksPath, JSON.stringify(WorldPacksJSON, undefined, 2));
+    }
+
+    if (doServerInstall){
+        // Install pack to the server.
+        version = `${version[0]}.${version[1]}.${version[2]}`;
+        let serverPackInfo = {"file_system": "RawPath", "path": rawPath, "uuid": uuid, "version": version};
+        serverPacksJSON.splice(1, 0, serverPackInfo);
+        await promiseExtract(packPath, installServerPath);
+        await fs.writeFile(serverPacksJsonPath, JSON.stringify(serverPacksJSON, undefined, 2));
+    }
 }
 
 /**
@@ -431,7 +445,7 @@ function extractPackManifest(packPath) {
 
     // Locate the manifest file in the zipped pack.
     let archive = new admZip(packPath);
-    let manifest = archive.getEntries().filter(entry => entry.entryName.endsWith('manifest.json') || entry.entryName.endsWith('pack_manifest.json'));
+    let manifest = archive.getEntries().filter(entry => !entry.entryName.startsWith("bridge/") && (entry.entryName.endsWith('manifest.json') || entry.entryName.endsWith('pack_manifest.json')));
     if (!manifest[0]) throw new Error('Unable to extract manifest file. It does not exist in this pack. ' + packPath);
     
     // Read the manifest and return the parsed JSON.
